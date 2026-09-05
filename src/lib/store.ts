@@ -76,9 +76,24 @@ export const checkChurchExists = async (churchId: string): Promise<{ exists: boo
   return { exists: false };
 };
 
-export const registerNewChurch = async (churchId: string): Promise<PlanState> => {
+export const getChurchIdFromName = (name: string): string => {
+  const trimmed = name.trim();
+  const matched = PREDEFINED_CHURCHES.find(
+    c => c.name.localeCompare(trimmed, undefined, { sensitivity: 'base' }) === 0
+  );
+  if (matched) return matched.id;
+
+  return trimmed
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+};
+
+export const registerNewChurch = async (churchId: string, customName?: string): Promise<PlanState> => {
   const docRef = doc(db, 'plan_trabajo', churchId);
-  const iglesiaName = PREDEFINED_CHURCHES.find(c => c.id === churchId)?.name || churchId;
+  const iglesiaName = customName || PREDEFINED_CHURCHES.find(c => c.id === churchId)?.name || churchId;
   const newPlan = createInitialState();
   newPlan.iglesia = iglesiaName;
   newPlan.churchId = churchId;

@@ -61,6 +61,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
   }, []);
 
   const getChurchName = (id: string) => {
+    const plan = plans.find(p => p.churchId === id);
+    if (plan && plan.iglesia) return plan.iglesia;
     return PREDEFINED_CHURCHES.find(c => c.id === id)?.name || id;
   };
 
