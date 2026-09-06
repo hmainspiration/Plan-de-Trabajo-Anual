@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { usePlanData } from './lib/store';
+import { usePlanData, useAdminSettings } from './lib/store';
 import { PREDEFINED_CHURCHES, MONTHS } from './data';
 import AreaAccordion from './components/AreaAccordion';
 import { exportToExcel } from './export';
@@ -21,7 +21,9 @@ import {
   MessageCircle,
   CheckCircle2,
   AlertCircle,
-  X
+  X,
+  Copy,
+  Check
 } from 'lucide-react';
 import { Home } from './components/Home';
 import { AdminDashboard } from './components/Admin';
@@ -39,12 +41,37 @@ export default function App() {
   const [activeChurchId, setActiveChurchId] = useState<string | null>(null);
   
   const { plan, updatePlan, loading, saving, syncError } = usePlanData(activeChurchId);
+  const { config: adminConfig } = useAdminSettings();
+  const isWhatsAppEnabled = Boolean(adminConfig.enableWhatsApp);
+
   const [isDarkMode, setIsDarkMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [showWhatsAppConfirm, setShowWhatsAppConfirm] = useState(false);
   const [whatsAppSuccessModal, setWhatsAppSuccessModal] = useState(false);
   const [isProcessingSend, setIsProcessingSend] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const handleCopyCode = async () => {
+    if (!plan.accessCode) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(plan.accessCode);
+      } else {
+        // Fallback
+        const textArea = document.createElement('textarea');
+        textArea.value = plan.accessCode;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    } catch (err) {
+      console.error('Error copying code to clipboard:', err);
+    }
+  };
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -281,13 +308,43 @@ export default function App() {
         )}
 
         {plan.accessCode && (
-          <div className={`mb-6 p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between ${isDarkMode ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-indigo-50 border-indigo-200'}`}>
+          <div className={`mb-6 p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${isDarkMode ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-indigo-50 border-indigo-200'}`}>
             <div>
               <h3 className={`text-sm font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-800'}`}>Código de Acceso a tu Iglesia</h3>
               <p className={`text-xs ${isDarkMode ? 'text-indigo-300/70' : 'text-indigo-600'}`}>Guarda este código. Se te pedirá la próxima vez que intentes ingresar a esta iglesia.</p>
             </div>
-            <div className={`mt-3 sm:mt-0 px-4 py-2 rounded-lg text-lg font-mono font-bold tracking-widest ${isDarkMode ? 'bg-black/40 text-white' : 'bg-white text-indigo-900 border border-indigo-100 shadow-sm'}`}>
-              {plan.accessCode}
+            <div className="flex items-center gap-2.5 self-stretch sm:self-auto justify-end">
+              <div 
+                className={`px-4 py-2 rounded-lg text-lg font-mono font-bold tracking-widest select-all cursor-pointer transition-transform active:scale-95 ${isDarkMode ? 'bg-black/40 text-white border border-white/10' : 'bg-white text-indigo-900 border border-indigo-100 shadow-sm'}`}
+                onClick={handleCopyCode}
+                title="Haz clic para copiar"
+              >
+                {plan.accessCode}
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 whitespace-nowrap ${
+                  copiedCode
+                    ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                    : isDarkMode
+                    ? 'bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40'
+                    : 'bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm'
+                }`}
+                title="Copiar código al portapapeles"
+              >
+                {copiedCode ? (
+                  <>
+                    <Check size={15} className="stroke-[3] text-white" />
+                    <span>¡Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={15} />
+                    <span>Copiar código</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         )}
@@ -363,29 +420,31 @@ export default function App() {
           ))}
         </section>
 
-        {/* Banner de Envío por WhatsApp */}
-        <div className={`mt-8 p-6 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4 transition-all ${isDarkMode ? 'bg-gradient-to-r from-emerald-950/40 to-teal-950/20 border-emerald-500/20' : 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200 shadow-sm'}`}>
-          <div className="space-y-1 text-center sm:text-left">
-            <div className="flex items-center justify-center sm:justify-start gap-2">
-              <span className={`p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400 ${isDarkMode ? 'bg-emerald-500/10' : 'bg-white shadow-xs'}`}>
-                <WhatsAppIcon className="w-5 h-5" />
-              </span>
-              <h3 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
-                Envío Oficial a la Jurisdicción
-              </h3>
+        {/* Banner de Envío por WhatsApp (Controlado por el Administrador) */}
+        {isWhatsAppEnabled && (
+          <div className={`mt-8 p-6 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4 transition-all ${isDarkMode ? 'bg-gradient-to-r from-emerald-950/40 to-teal-950/20 border-emerald-500/20' : 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200 shadow-sm'}`}>
+            <div className="space-y-1 text-center sm:text-left">
+              <div className="flex items-center justify-center sm:justify-start gap-2">
+                <span className={`p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400 ${isDarkMode ? 'bg-emerald-500/10' : 'bg-white shadow-xs'}`}>
+                  <WhatsAppIcon className="w-5 h-5" />
+                </span>
+                <h3 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                  Envío Oficial a la Jurisdicción
+                </h3>
+              </div>
+              <p className={`text-xs max-w-md ${isDarkMode ? 'text-white/60' : 'text-slate-600'}`}>
+                Al finalizar de registrar tus actividades, envía el documento oficial XLSX directamente por WhatsApp al número de la Jurisdicción: <span className="font-semibold text-emerald-600 dark:text-emerald-400">+505 5769 3382</span>.
+              </p>
             </div>
-            <p className={`text-xs max-w-md ${isDarkMode ? 'text-white/60' : 'text-slate-600'}`}>
-              Al finalizar de registrar tus actividades, envía el documento oficial XLSX directamente por WhatsApp al número de la Jurisdicción: <span className="font-semibold text-emerald-600 dark:text-emerald-400">+505 5769 3382</span>.
-            </p>
+            <button
+              type="button"
+              onClick={() => setShowWhatsAppConfirm(true)}
+              className="flex items-center px-5 py-3 rounded-xl text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-95 shadow-md shadow-emerald-600/25 transition-all whitespace-nowrap"
+            >
+              <WhatsAppIcon className="w-4 h-4 mr-2" /> Enviar por WhatsApp
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowWhatsAppConfirm(true)}
-            className="flex items-center px-5 py-3 rounded-xl text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-95 shadow-md shadow-emerald-600/25 transition-all whitespace-nowrap"
-          >
-            <WhatsAppIcon className="w-4 h-4 mr-2" /> Enviar por WhatsApp
-          </button>
-        </div>
+        )}
 
       </main>
 
@@ -405,19 +464,21 @@ export default function App() {
             <FileSpreadsheet size={20} className="group-hover:scale-110 transition-transform text-indigo-500" />
           </button>
 
-          <button
-            onClick={() => setShowWhatsAppConfirm(true)}
-            className="flex items-center gap-2 px-4 h-12 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-600/30 transition-all transform hover:-translate-y-0.5 active:scale-95 font-semibold text-xs sm:text-sm"
-            title="Enviar a WhatsApp (+505 5769 3382)"
-          >
-            <WhatsAppIcon className="w-5 h-5 flex-shrink-0" />
-            <span className="hidden sm:inline">Enviar por WhatsApp</span>
-          </button>
+          {isWhatsAppEnabled && (
+            <button
+              onClick={() => setShowWhatsAppConfirm(true)}
+              className="flex items-center gap-2 px-4 h-12 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-600/30 transition-all transform hover:-translate-y-0.5 active:scale-95 font-semibold text-xs sm:text-sm"
+              title="Enviar a WhatsApp (+505 5769 3382)"
+            >
+              <WhatsAppIcon className="w-5 h-5 flex-shrink-0" />
+              <span className="hidden sm:inline">Enviar por WhatsApp</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* MODAL: Confirmación antes de enviar por WhatsApp */}
-      {showWhatsAppConfirm && (
+      {isWhatsAppEnabled && showWhatsAppConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className={`relative w-full max-w-md p-6 rounded-3xl border shadow-2xl transition-all ${isDarkMode ? 'bg-[#151329] border-white/15 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
             <button
@@ -489,7 +550,7 @@ export default function App() {
       )}
 
       {/* MODAL: Éxito tras abrir WhatsApp y descargar Excel */}
-      {whatsAppSuccessModal && (
+      {isWhatsAppEnabled && whatsAppSuccessModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className={`relative w-full max-w-md p-6 rounded-3xl border shadow-2xl transition-all ${isDarkMode ? 'bg-[#151329] border-white/15 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
             <div className="text-center space-y-3">

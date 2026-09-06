@@ -115,7 +115,51 @@ export const verifyChurchAccess = async (churchId: string, code: string): Promis
   return false;
 };
 
-// Admin Functions
+// Admin Functions & Settings
+export interface AdminConfig {
+  pin: string;
+  enableWhatsApp: boolean;
+}
+
+export const useAdminSettings = () => {
+  const [config, setConfig] = useState<AdminConfig>({
+    pin: '123456',
+    enableWhatsApp: false, // Default is false (hidden for churches)
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const docRef = doc(db, 'admin_settings', 'config');
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setConfig({
+          pin: data.pin || '123456',
+          enableWhatsApp: Boolean(data.enableWhatsApp),
+        });
+      } else {
+        setConfig({
+          pin: '123456',
+          enableWhatsApp: false,
+        });
+      }
+      setLoading(false);
+    }, (err) => {
+      console.error("Admin settings snapshot error:", err);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  return { config, loading };
+};
+
+export const updateAdminConfig = async (updates: Partial<AdminConfig>): Promise<void> => {
+  const docRef = doc(db, 'admin_settings', 'config');
+  await setDoc(docRef, updates, { merge: true });
+};
+
 export const verifyAdminPin = async (pin: string): Promise<boolean> => {
   const docRef = doc(db, 'admin_settings', 'config');
   const snapshot = await getDoc(docRef);
@@ -123,8 +167,8 @@ export const verifyAdminPin = async (pin: string): Promise<boolean> => {
     const savedPin = snapshot.data().pin;
     return savedPin === pin || pin === '123456' || pin === '252627';
   } else {
-    // Initialize default PIN if not exists
-    await setDoc(docRef, { pin: '123456' });
+    // Initialize default config if not exists
+    await setDoc(docRef, { pin: '123456', enableWhatsApp: false }, { merge: true });
     return pin === '123456' || pin === '252627';
   }
 };
