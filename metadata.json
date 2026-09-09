@@ -1,6 +1,6 @@
 {
-  "name": "Plan de Trabajo Anual - Jurisdicción Nicaragua",
-  "description": "Sistema de gestión y supervisión del Plan Anual de Trabajo para las iglesias de la Jurisdicción Nicaragua, con soporte de consolidado nacional y exportación a Excel.",
+  "name": "Plan de Trabajo Anual - Jurisdicción Nicaragua v1.0.1",
+  "description": "Sistema de gestión y supervisión del Plan Anual de Trabajo para las iglesias de la Jurisdicción Nicaragua, con soporte de consolidado nacional y exportación a Excel. (v1.0.1)",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
