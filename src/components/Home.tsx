@@ -262,24 +262,24 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
   // Helper to visually highlight the typed match in church name
   const renderHighlightedName = (name: string) => {
     const q = normalize(churchInput);
-    if (!q) return name;
+    if (!q) return <span>{name}</span>;
 
     const normName = normalize(name);
     const index = normName.indexOf(q);
-    if (index === -1) return name;
+    if (index === -1) return <span>{name}</span>;
 
     const before = name.slice(0, index);
     const match = name.slice(index, index + churchInput.length);
     const after = name.slice(index + churchInput.length);
 
     return (
-      <>
-        {before}
+      <span className="notranslate">
+        {before && <span>{before}</span>}
         <span className="font-extrabold text-indigo-500 dark:text-indigo-400 bg-indigo-500/10 dark:bg-indigo-400/20 px-0.5 rounded">
           {match}
         </span>
-        {after}
-      </>
+        {after && <span>{after}</span>}
+      </span>
     );
   };
 
@@ -494,7 +494,9 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
           {showCodeInput && (
             <div className="space-y-4 animate-fade-in">
               <div className={`p-4 rounded-xl text-sm ${isDarkMode ? 'bg-indigo-500/10 text-indigo-300' : 'bg-indigo-50 text-indigo-800'}`}>
-                La iglesia <span className="font-bold">{selectedChurchName}</span> ya está registrada. Por favor ingresa el código de acceso.
+                <span>La iglesia </span>
+                <strong className="font-bold notranslate">{selectedChurchName}</strong>
+                <span> ya está registrada. Por favor ingresa el código de acceso.</span>
               </div>
               <div>
                 <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-white/80' : 'text-slate-700'}`}>
@@ -504,6 +506,8 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
                   <Lock size={18} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDarkMode ? 'text-white/40' : 'text-slate-400'}`} />
                   <input
                     type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
                     value={accessCode}
                     onChange={(e) => setAccessCode(e.target.value)}
                     className={`w-full rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none transition-colors ${isDarkMode ? 'bg-black/20 border border-white/10 text-white focus:border-indigo-400' : 'bg-transparent border border-slate-200 text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'}`}
@@ -515,18 +519,24 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
             </div>
           )}
 
-
           {error && <p className="text-red-400 text-xs">{error}</p>}
 
           <button
+            type="button"
             onClick={handleContinue}
             disabled={loading || !churchInput.trim() || (showCodeInput && !accessCode.trim())}
             className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-colors flex justify-center items-center disabled:opacity-50 shadow-md shadow-indigo-600/20 active:scale-98"
           >
-            {loading ? <Loader2 size={18} className="animate-spin" /> : (
-              showCodeInput ? 'Verificar y Entrar' : (
-                <>Continuar <ArrowRight size={18} className="ml-2" /></>
-              )
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <Loader2 size={18} className="animate-spin" />
+              </span>
+            ) : showCodeInput ? (
+              <span>Verificar y Entrar</span>
+            ) : (
+              <span className="flex items-center justify-center">
+                Continuar <ArrowRight size={18} className="ml-2" />
+              </span>
             )}
           </button>
           
@@ -537,7 +547,7 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
             >
               <Shield size={14} className="mr-1" /> Acceso Administrativo
             </button>
-            <div className={`mt-2 text-[10px] ${isDarkMode ? 'text-white/30' : 'text-slate-300'}`}>v1.0.1</div>
+            <div className={`mt-2 text-[10px] ${isDarkMode ? 'text-white/30' : 'text-slate-300'}`}>v1.1.1</div>
           </div>
         </div>
       )}
