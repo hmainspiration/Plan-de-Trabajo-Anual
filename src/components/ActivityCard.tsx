@@ -15,7 +15,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ activity, isDarkMode, isLoc
   const handleMonthChange = (month: string, value: string) => {
     if (isLocked) return;
     const numValue = parseInt(value, 10);
-    const newMonths = { ...activity.months, [month]: isNaN(numValue) ? 0 : numValue };
+    const newMonths = { ...(activity.months || {}), [month]: isNaN(numValue) ? 0 : numValue };
     onChange({ ...activity, months: newMonths });
   };
 
@@ -24,7 +24,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ activity, isDarkMode, isLoc
     onChange({ ...activity, observaciones: e.target.value });
   };
 
-  const totalAnual = MONTHS.reduce((sum, m) => sum + (activity.months[m] || 0), 0);
+  const totalAnual = MONTHS.reduce((sum, m) => sum + ((activity.months && activity.months[m]) || 0), 0);
+
 
   return (
     <div className={`rounded-xl border overflow-hidden mb-4 transition-all ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200 shadow-sm'}`}>
@@ -52,7 +53,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ activity, isDarkMode, isLoc
                   min="0"
                   disabled={isLocked}
                   readOnly={isLocked}
-                  value={activity.months[month] === 0 ? '' : activity.months[month]}
+                  value={(activity.months && activity.months[month] === 0) ? '' : (activity.months?.[month] ?? '')}
                   onChange={(e) => handleMonthChange(month, e.target.value)}
                   className={`w-full rounded-lg p-1.5 text-sm focus:outline-none transition-all ${isLocked ? (isDarkMode ? 'bg-white/5 border border-white/5 text-white/50 cursor-not-allowed' : 'bg-slate-100 border border-slate-200 text-slate-500 cursor-not-allowed') : (isDarkMode ? 'bg-white/5 border border-white/10 text-white focus:border-indigo-400 placeholder:text-white/20' : 'bg-white border border-slate-200 text-slate-800 focus:border-indigo-500 placeholder:text-slate-300 shadow-sm')}`}
                   placeholder="0"
@@ -66,7 +67,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({ activity, isDarkMode, isLoc
               <MessageSquare size={14} className="mr-1" /> Observaciones y Comentarios
             </label>
             <textarea
-              value={activity.observaciones}
+              value={activity.observaciones || ''}
+
               disabled={isLocked}
               readOnly={isLocked}
               onChange={handleObsChange}

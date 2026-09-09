@@ -45,16 +45,21 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on click outside
+  // Close dropdown on click outside (supporting touch devices)
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
+
 
   // Filter and sort suggestions based on input
   const filteredChurches = useMemo(() => {
@@ -443,7 +448,7 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
                         }`}
                       >
                         <div className="flex items-center gap-2.5 truncate mr-2">
-                          <CustomLogoIcon className={`w-[15px] h-[15px] flex-shrink-0 ${isSelected ? 'text-indigo-500' : isDarkMode ? 'text-white/30' : 'text-slate-400'}`} />
+                          <Building2 size={15} className={`flex-shrink-0 ${isSelected ? 'text-indigo-500' : isDarkMode ? 'text-white/40' : 'text-slate-400'}`} />
                           <span className="truncate">{renderHighlightedName(church.name)}</span>
                         </div>
 
@@ -504,12 +509,12 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
                     className={`w-full rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none transition-colors ${isDarkMode ? 'bg-black/20 border border-white/10 text-white focus:border-indigo-400' : 'bg-transparent border border-slate-200 text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'}`}
                     placeholder="000000"
                     maxLength={6}
-                    autoFocus
                   />
                 </div>
               </div>
             </div>
           )}
+
 
           {error && <p className="text-red-400 text-xs">{error}</p>}
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { doc, onSnapshot, setDoc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { createInitialState, PlanState, PREDEFINED_CHURCHES } from '../data';
+import { createInitialState, PlanState, PREDEFINED_CHURCHES, sanitizePlanState } from '../data';
 
 export const usePlanData = (churchId: string | null) => {
   const [plan, setPlan] = useState<PlanState>(createInitialState());
@@ -20,11 +20,9 @@ export const usePlanData = (churchId: string | null) => {
 
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
-        const data = snapshot.data() as PlanState;
-        // Ignore snapshots with pending writes so we don't overwrite user's typing
-        // with a snapshot that is echoing back a previous keystroke.
-        if (data.areas && !snapshot.metadata.hasPendingWrites) {
-          setPlan(data);
+        const data = snapshot.data();
+        if (!snapshot.metadata.hasPendingWrites) {
+          setPlan(sanitizePlanState(data));
         }
       }
       setLoading(false);
@@ -36,6 +34,7 @@ export const usePlanData = (churchId: string | null) => {
 
     return () => unsubscribe();
   }, [churchId]);
+
 
   const updatePlan = useCallback(async (newPlan: PlanState) => {
     if (!churchId) return;

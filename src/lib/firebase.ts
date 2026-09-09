@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, enableMultiTabIndexedDbPersistence, initializeFirestore } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore";
 import config from "../../firebase-applet-config.json";
 
 const firebaseConfig = {
@@ -12,8 +12,5 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(app, {
-  localCache: {
-    kind: "persistent"
-  }
-}, config.firestoreDatabaseId);
+export const db = getFirestore(app, config.firestoreDatabaseId);
+

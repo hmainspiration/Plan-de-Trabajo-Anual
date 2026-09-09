@@ -243,11 +243,12 @@ export default function App() {
     updatePlan({ ...plan, areas: newAreas });
   };
 
-  const totalActividades = plan.areas.reduce((acc, area) => 
-    acc + area.activities.reduce((a, act) => 
-      a + MONTHS.reduce((m, month) => m + (act.months[month] || 0), 0)
+  const totalActividades = (plan?.areas || []).reduce((acc, area) => 
+    acc + (area?.activities || []).reduce((a, act) => 
+      a + MONTHS.reduce((m, month) => m + ((act?.months && act.months[month]) || 0), 0)
     , 0)
   , 0);
+
 
   return (
     <div className="min-h-screen pb-20 transition-all duration-500" style={bgStyle}>
@@ -409,7 +410,7 @@ export default function App() {
 
         {/* Areas Section */}
         <section>
-          {plan.areas.map((area, idx) => (
+          {(plan?.areas || []).map((area, idx) => (
             <AreaAccordion
               key={idx}
               area={area}
@@ -419,6 +420,7 @@ export default function App() {
             />
           ))}
         </section>
+
 
         {/* Banner de Envío por WhatsApp (Controlado por el Administrador) */}
         {isWhatsAppEnabled && (

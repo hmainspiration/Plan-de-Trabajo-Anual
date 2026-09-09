@@ -15,10 +15,11 @@ const AreaAccordion: React.FC<AreaAccordionProps> = ({ area, isDarkMode, isLocke
 
   const handleActivityChange = (index: number, updatedActivity: ActivityState) => {
     if (isLocked) return;
-    const newActivities = [...area.activities];
+    const newActivities = [...(area.activities || [])];
     newActivities[index] = updatedActivity;
     onChange({ ...area, activities: newActivities });
   };
+
 
   return (
     <div className={`mb-4 rounded-2xl border overflow-hidden transition-colors ${isDarkMode ? 'bg-white/5 border-white/10 shadow-2xl backdrop-blur-xl' : 'bg-white border-slate-200 shadow-sm'}`}>
@@ -40,7 +41,7 @@ const AreaAccordion: React.FC<AreaAccordionProps> = ({ area, isDarkMode, isLocke
 
       {expanded && (
         <div className={`p-4 sm:p-5 border-t transition-colors ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'}`}>
-          {area.activities.map((act, idx) => (
+          {(area.activities || []).map((act, idx) => (
             <ActivityCard
               key={idx}
               activity={act}
@@ -51,6 +52,7 @@ const AreaAccordion: React.FC<AreaAccordionProps> = ({ area, isDarkMode, isLocke
           ))}
         </div>
       )}
+
     </div>
   );
 };

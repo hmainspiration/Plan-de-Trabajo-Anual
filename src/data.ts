@@ -176,3 +176,61 @@ export const createInitialState = (): PlanState => {
     }))
   };
 };
+
+export const sanitizePlanState = (raw: any): PlanState => {
+
+  const initial = createInitialState();
+  if (!raw || typeof raw !== 'object') return initial;
+
+  const iglesia = typeof raw.iglesia === 'string' ? raw.iglesia : '';
+  const ministro = typeof raw.ministro === 'string' ? raw.ministro : '';
+  const isLocked = Boolean(raw.isLocked);
+  const churchId = raw.churchId;
+  const accessCode = raw.accessCode;
+  const updatedAt = typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now();
+
+  let areas: AreaState[] = [];
+  if (Array.isArray(raw.areas) && raw.areas.length > 0) {
+    areas = raw.areas.map((area: any, areaIdx: number) => {
+      const templateArea = INITIAL_DATA_TEMPLATE.areas[areaIdx];
+      const areaName = area?.name || templateArea?.name || `Área ${areaIdx + 1}`;
+      const areaObjective = area?.objective || templateArea?.objective || '';
+
+      const activities: ActivityState[] = Array.isArray(area?.activities)
+        ? area.activities.map((act: any, actIdx: number) => {
+            const templateActName = templateArea?.activities?.[actIdx] || `Actividad ${actIdx + 1}`;
+            const actName = act?.name || templateActName;
+            const months: Record<string, number> = {};
+            MONTHS.forEach(m => {
+              months[m] = typeof act?.months?.[m] === 'number' ? act.months[m] : 0;
+            });
+            const observaciones = typeof act?.observaciones === 'string' ? act.observaciones : '';
+            return { name: actName, months, observaciones };
+          })
+        : (templateArea?.activities || []).map(actName => ({
+            name: actName,
+            months: MONTHS.reduce((acc, m) => ({ ...acc, [m]: 0 }), {} as Record<string, number>),
+            observaciones: ''
+          }));
+
+      return {
+        name: areaName,
+        objective: areaObjective,
+        activities
+      };
+    });
+  } else {
+    areas = initial.areas;
+  }
+
+  return {
+    iglesia,
+    ministro,
+    isLocked,
+    churchId,
+    accessCode,
+    updatedAt,
+    areas
+  };
+};
+
