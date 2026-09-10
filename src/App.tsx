@@ -26,7 +26,8 @@ import {
   Check,
   Shield,
   Eye,
-  EyeOff
+  EyeOff,
+  AlertTriangle
 } from 'lucide-react';
 import { Home } from './components/Home';
 import { AdminDashboard } from './components/Admin';
@@ -428,7 +429,11 @@ export default function App() {
             </button>
           </div>
         </header>
-        <AdminDashboard isDarkMode={isDarkMode} onLogout={handleAdminLogout} />
+        <AdminDashboard 
+          isDarkMode={isDarkMode} 
+          onLogout={handleAdminLogout} 
+          onOpenChurchForm={(churchId) => navigateTo('editor', churchId)}
+        />
       </div>
     );
   }
@@ -509,7 +514,21 @@ export default function App() {
               Plan de Trabajo <span className={isDarkMode ? "font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400" : "font-bold text-indigo-600"}>{PREDEFINED_CHURCHES.find(c => c.id === activeChurchId)?.name || 'Iglesia'}</span>
             </h1>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            {(isAdminAuthenticated || (typeof window !== 'undefined' && sessionStorage.getItem('admin_authenticated') === 'true')) && (
+              <button
+                onClick={() => navigateTo('admin')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+                  isDarkMode 
+                    ? 'bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border-indigo-500/40' 
+                    : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm'
+                }`}
+                title="Volver al Panel de Administración"
+              >
+                <Shield size={14} className="text-indigo-400" />
+                <span className="hidden sm:inline">Panel Admin</span>
+              </button>
+            )}
             <button
               onClick={toggleTheme}
               className={`p-2 rounded-full border transition-colors flex items-center justify-center ${isDarkMode ? 'bg-white/5 border-white/10 text-indigo-300 hover:bg-white/10' : 'bg-white/50 border-slate-200 text-indigo-600 hover:bg-white'}`}
@@ -538,6 +557,24 @@ export default function App() {
 
       <main className="max-w-4xl mx-auto px-4 py-6">
         
+        {/* Banner de Responsabilidad si el Administrador está dentro del editor */}
+        {(isAdminAuthenticated || (typeof window !== 'undefined' && sessionStorage.getItem('admin_authenticated') === 'true')) && (
+          <div className={`mb-6 p-4 rounded-2xl border flex items-start gap-3 transition-all ${
+            isDarkMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-200' : 'bg-amber-50 border-amber-300 text-amber-900 shadow-xs'
+          }`}>
+            <AlertTriangle size={22} className="flex-shrink-0 text-amber-500 mt-0.5" />
+            <div className="text-xs sm:text-sm space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-bold text-amber-600 dark:text-amber-400">Modo de Supervisión Administrativa Activo</p>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30">Acceso sin contraseña</span>
+              </div>
+              <p className="opacity-90 leading-relaxed">
+                Has ingresado con permisos de Administrador a este formulario. Ten presente que cualquier dato que modifiques o guardes <strong>alterará directamente el plan de trabajo ya elaborado por el ministro</strong>.
+              </p>
+            </div>
+          </div>
+        )}
+
         {plan.isLocked && (
           <div className={`mb-6 p-4 rounded-xl border flex items-center gap-3 ${isDarkMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
             <Lock size={20} className="flex-shrink-0 text-amber-500" />

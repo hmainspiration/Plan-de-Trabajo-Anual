@@ -27,7 +27,8 @@ import {
   ChevronsDown,
   ChevronsUp,
   FileSpreadsheet,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react';
 import { exportToExcel } from '../export';
 
@@ -40,9 +41,10 @@ const WhatsAppIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
 interface AdminDashboardProps {
   isDarkMode: boolean;
   onLogout: () => void;
+  onOpenChurchForm?: (churchId: string) => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLogout }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLogout, onOpenChurchForm }) => {
   const [plans, setPlans] = useState<PlanState[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'list' | 'consolidated'>('list');
@@ -54,6 +56,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
   // Delete church state
   const [churchToDelete, setChurchToDelete] = useState<PlanState | null>(null);
   const [isDeletingChurch, setIsDeletingChurch] = useState(false);
+
+  // Open church form state (admin access with responsibility alert)
+  const [churchToOpenForm, setChurchToOpenForm] = useState<PlanState | null>(null);
 
   // Excel import state
   const adminFileInputRef = useRef<HTMLInputElement>(null);
@@ -587,6 +592,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
                   
                   {/* Actions Toolbar: Dedicated row below info so buttons never compress the minister name */}
                   <div className={`pt-3.5 border-t flex flex-wrap items-center gap-2 sm:gap-2.5 ${isDarkMode ? 'border-white/10' : 'border-slate-100'}`}>
+                    {/* Botón Acceder al Formulario Directo (Supervisión) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedPlan.isLocked) return;
+                        setChurchToOpenForm(selectedPlan);
+                      }}
+                      disabled={selectedPlan.isLocked}
+                      className={`flex items-center px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                        selectedPlan.isLocked 
+                          ? (isDarkMode ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed opacity-50' : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60')
+                          : (isDarkMode ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500/50 shadow-md shadow-indigo-600/30' : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 shadow-sm')
+                      }`}
+                      title={
+                        selectedPlan.isLocked 
+                          ? "Iglesia bloqueada: Primero debes presionar 'Desbloquear Edición' antes de poder ingresar al formulario" 
+                          : "Ingresar al formulario de esta iglesia sin contraseña como Administrador"
+                      }
+                    >
+                      <ExternalLink size={14} className="mr-1.5" />
+                      <span>Acceder al Formulario</span>
+                    </button>
+
                     <button
                       onClick={handleToggleLock}
                       disabled={isTogglingLock}
@@ -1009,6 +1037,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
                     Sí, Eliminar Registro
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Aviso de Responsabilidad Administrativa */}
+      {churchToOpenForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className={`max-w-md w-full rounded-2xl border p-6 shadow-2xl space-y-4 ${
+            isDarkMode ? 'bg-[#18162d] border-white/15 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-start gap-3.5">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-500 border border-amber-500/30 flex-shrink-0">
+                <AlertTriangle size={26} />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold">
+                  Aviso de Responsabilidad
+                </h3>
+                <p className={`text-xs ${isDarkMode ? 'text-white/60' : 'text-slate-500'}`}>
+                  Acceso Administrativo Directo al Formulario
+                </p>
+              </div>
+            </div>
+
+            <div className={`p-4 rounded-xl border space-y-3 text-xs sm:text-sm leading-relaxed ${
+              isDarkMode ? 'bg-amber-500/10 border-amber-500/20 text-amber-100' : 'bg-amber-50/80 border-amber-200 text-amber-950'
+            }`}>
+              <div className="flex items-center justify-between pb-2.5 border-b border-amber-500/20 flex-wrap gap-1">
+                <span className="font-bold text-sm text-indigo-400 dark:text-indigo-300">
+                  {getChurchName(churchToOpenForm.churchId!)}
+                </span>
+                {churchToOpenForm.ministro && (
+                  <span className="text-xs opacity-85 truncate max-w-[220px]">
+                    Ministro: <strong className="font-semibold">{churchToOpenForm.ministro}</strong>
+                  </span>
+                )}
+              </div>
+
+              <p>
+                Como <strong>Administrador</strong>, estás a punto de ingresar directamente al formulario de trabajo de esta iglesia <strong>sin necesidad de su código de acceso</strong>.
+              </p>
+
+              <div className={`p-3 rounded-xl border text-xs font-medium space-y-1 ${
+                isDarkMode ? 'bg-black/40 border-amber-500/40 text-amber-300' : 'bg-white border-amber-300 text-amber-900 shadow-xs'
+              }`}>
+                <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400">
+                  <AlertTriangle size={15} className="flex-shrink-0" />
+                  <span>Advertencia de Modificación</span>
+                </div>
+                <p className="leading-relaxed">
+                  Cualquier dato que agregues, modifiques o elimines <strong>alterará directamente un plan de trabajo ya elaborado por el ministro</strong> de la congregación.
+                </p>
+              </div>
+
+              <p className="text-[11px] opacity-80 italic">
+                Procede únicamente si tienes encomendada la revisión o corrección oficial de este plan.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setChurchToOpenForm(null)}
+                className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
+                  isDarkMode ? 'bg-white/10 hover:bg-white/15 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetId = churchToOpenForm.churchId!;
+                  setChurchToOpenForm(null);
+                  if (onOpenChurchForm) {
+                    onOpenChurchForm(targetId);
+                  }
+                }}
+                className="flex items-center px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-md shadow-amber-600/30 transition-all active:scale-98"
+              >
+                <Check size={15} className="stroke-[3] mr-1.5" />
+                <span>Entendido, Ingresar al Formulario</span>
               </button>
             </div>
           </div>
