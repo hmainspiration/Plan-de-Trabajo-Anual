@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PlanState, PREDEFINED_CHURCHES, MONTHS, createInitialState } from '../data';
-import { getAllPlans, updatePlanAdmin, useAdminSettings, updateAdminConfig } from '../lib/store';
+import { getAllPlans, updatePlanAdmin, useAdminSettings, updateAdminConfig, deleteChurchPlan } from '../lib/store';
+import { importFromExcel } from '../lib/import';
 import { 
   Building2, 
   LogOut, 
@@ -20,7 +21,13 @@ import {
   Eye,
   EyeOff,
   Sliders,
-  Copy
+  Copy,
+  Trash2,
+  Upload,
+  ChevronsDown,
+  ChevronsUp,
+  FileSpreadsheet,
+  AlertTriangle
 } from 'lucide-react';
 import { exportToExcel } from '../export';
 
@@ -43,6 +50,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
 
   const { config: adminConfig, loading: loadingConfig } = useAdminSettings();
   const [isTogglingWhatsApp, setIsTogglingWhatsApp] = useState(false);
+
+  // Delete church state
+  const [churchToDelete, setChurchToDelete] = useState<PlanState | null>(null);
+  const [isDeletingChurch, setIsDeletingChurch] = useState(false);
+
+  // Excel import state
+  const adminFileInputRef = useRef<HTMLInputElement>(null);
+  const [isImportingExcel, setIsImportingExcel] = useState(false);
+  const [adminToast, setAdminToast] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   const [editingField, setEditingField] = useState<'ministro' | 'accessCode' | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -219,6 +235,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
     }
   };
 
+  const handleAdminFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedPlan || !selectedPlan.churchId) return;
+
+    setIsImportingExcel(true);
+    setAdminToast(null);
+
+    try {
+      const updatedPlan = await importFromExcel(file, selectedPlan);
+      updatedPlan.churchId = selectedPlan.churchId;
+      updatedPlan.updatedAt = Date.now();
+      if (!updatedPlan.iglesia) updatedPlan.iglesia = selectedPlan.iglesia;
+      if (!updatedPlan.accessCode) updatedPlan.accessCode = selectedPlan.accessCode;
+
+      await updatePlanAdmin(selectedPlan.churchId, updatedPlan);
+      setPlans(prev => prev.map(p => p.churchId === selectedPlan.churchId ? updatedPlan : p));
+
+      setAdminToast({
+        type: 'success',
+        message: `¡Datos importados y actualizados correctamente desde Excel para "${getChurchName(selectedPlan.churchId)}"!`
+      });
+      setTimeout(() => setAdminToast(null), 4000);
+    } catch (err) {
+      console.error("Error al importar Excel en administración:", err);
+      setAdminToast({
+        type: 'error',
+        message: 'No se pudo importar el archivo. Asegúrate de que sea el formato de Plan de Trabajo oficial.'
+      });
+      setTimeout(() => setAdminToast(null), 5000);
+    } finally {
+      setIsImportingExcel(false);
+      if (adminFileInputRef.current) {
+        adminFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const confirmDeleteChurch = async () => {
+    if (!churchToDelete || !churchToDelete.churchId) return;
+
+    const idToDelete = churchToDelete.churchId;
+    const nameToDelete = getChurchName(idToDelete);
+    setIsDeletingChurch(true);
+
+    try {
+      await deleteChurchPlan(idToDelete);
+      const remainingPlans = plans.filter(p => p.churchId !== idToDelete);
+      setPlans(remainingPlans);
+
+      if (selectedPlanId === idToDelete) {
+        setSelectedPlanId(remainingPlans.length > 0 ? (remainingPlans[0].churchId || null) : null);
+      }
+
+      setChurchToDelete(null);
+      setAdminToast({
+        type: 'success',
+        message: `El registro de "${nameToDelete}" fue eliminado de la base de datos.`
+      });
+      setTimeout(() => setAdminToast(null), 4000);
+    } catch (err) {
+      console.error("Error al eliminar iglesia:", err);
+      setAdminToast({
+        type: 'error',
+        message: 'Ocurrió un error al intentar eliminar la iglesia de la base de datos.'
+      });
+      setTimeout(() => setAdminToast(null), 5000);
+    } finally {
+      setIsDeletingChurch(false);
+    }
+  };
+
   const handleToggleWhatsApp = async () => {
     setIsTogglingWhatsApp(true);
     try {
@@ -350,28 +437,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
               <p className={`text-sm ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>No hay datos registrados aún.</p>
             ) : (
               plans.map(plan => (
-                <button
-                  key={plan.churchId}
-                  onClick={() => setSelectedPlanId(plan.churchId || null)}
-                  className={`w-full flex items-center p-4 rounded-xl border text-left transition-all ${selectedPlanId === plan.churchId ? (isDarkMode ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-indigo-50 border-indigo-200') : (isDarkMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-slate-200 hover:bg-slate-50 shadow-sm')}`}
-                >
-                  <Building2 size={20} className={`mr-3 flex-shrink-0 ${selectedPlanId === plan.churchId ? 'text-indigo-500' : (isDarkMode ? 'text-white/40' : 'text-slate-400')}`} />
-                  <div className="overflow-hidden flex-1">
-                    <div className="flex items-center justify-between">
-                      <p className={`font-medium truncate ${selectedPlanId === plan.churchId ? (isDarkMode ? 'text-indigo-300' : 'text-indigo-700') : (isDarkMode ? 'text-white' : 'text-slate-800')}`}>
-                        {getChurchName(plan.churchId!)}
+                <div key={plan.churchId} className="relative group">
+                  <button
+                    onClick={() => setSelectedPlanId(plan.churchId || null)}
+                    className={`w-full flex items-center p-4 pr-11 rounded-xl border text-left transition-all ${selectedPlanId === plan.churchId ? (isDarkMode ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-indigo-50 border-indigo-200') : (isDarkMode ? 'bg-white/5 border-white/10 hover:bg-white/10' : 'bg-white border-slate-200 hover:bg-slate-50 shadow-sm')}`}
+                  >
+                    <Building2 size={20} className={`mr-3 flex-shrink-0 ${selectedPlanId === plan.churchId ? 'text-indigo-500' : (isDarkMode ? 'text-white/40' : 'text-slate-400')}`} />
+                    <div className="overflow-hidden flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className={`font-medium truncate ${selectedPlanId === plan.churchId ? (isDarkMode ? 'text-indigo-300' : 'text-indigo-700') : (isDarkMode ? 'text-white' : 'text-slate-800')}`}>
+                          {getChurchName(plan.churchId!)}
+                        </p>
+                        {plan.isLocked && (
+                          <span title="Edición bloqueada" className={`ml-1.5 flex-shrink-0 p-1 rounded-md text-[10px] font-bold flex items-center gap-1 ${isDarkMode ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
+                            <Lock size={11} /> Bloqueada
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-xs truncate mt-0.5 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
+                        {plan.ministro || 'Sin ministro registrado'}
                       </p>
-                      {plan.isLocked && (
-                        <span title="Edición bloqueada" className={`ml-1.5 flex-shrink-0 p-1 rounded-md text-[10px] font-bold flex items-center gap-1 ${isDarkMode ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
-                          <Lock size={11} /> Bloqueada
-                        </span>
-                      )}
                     </div>
-                    <p className={`text-xs truncate mt-0.5 ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
-                      {plan.ministro || 'Sin ministro registrado'}
-                    </p>
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setChurchToDelete(plan);
+                    }}
+                    title={`Eliminar registro de ${getChurchName(plan.churchId!)}`}
+                    className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg opacity-80 hover:opacity-100 transition-all ${
+                      isDarkMode 
+                        ? 'hover:bg-red-500/20 text-red-400/80 hover:text-red-300' 
+                        : 'hover:bg-red-50 text-red-500 hover:text-red-700'
+                    }`}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               ))
             )}
           </div>
@@ -380,10 +483,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
             {selectedPlan ? (
               <div className={`p-6 rounded-2xl border ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200 shadow-sm'}`}>
                 {/* Header of selected church */}
-                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6 pb-6 border-b border-dashed border-slate-200 dark:border-white/10">
+                <div className="mb-6 pb-5 border-b border-dashed border-slate-200 dark:border-white/10 space-y-4">
+                  {/* Church Identity & Metadata (Full width, generous breathing room) */}
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <h2 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{getChurchName(selectedPlan.churchId!)}</h2>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <h2 className={`text-xl sm:text-2xl font-bold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                        {getChurchName(selectedPlan.churchId!)}
+                      </h2>
                       {selectedPlan.isLocked && (
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 ${isDarkMode ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
                           <Lock size={12} /> Bloqueado para cambios
@@ -391,77 +497,96 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
                       )}
                     </div>
                     
-                    {/* Ministro Inline Edit */}
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-medium ${isDarkMode ? 'text-white/60' : 'text-slate-600'}`}>Ministro:</span>
-                      {editingField === 'ministro' ? (
-                        <div className="flex items-center gap-1">
-                          <input 
-                            value={editValue} 
-                            onChange={e => setEditValue(e.target.value)} 
-                            className={`px-2 py-1 text-sm rounded border ${isDarkMode ? 'bg-black/30 border-white/20 text-white' : 'bg-white border-slate-300 text-slate-800'}`}
-                            autoFocus
-                          />
-                          <button onClick={handleSaveEdit} disabled={isSavingEdit} className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors">
-                            <Check size={14} />
-                          </button>
-                          <button onClick={() => setEditingField(null)} disabled={isSavingEdit} className="p-1 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 group">
-                          <span className={`text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{selectedPlan.ministro || 'No asignado'}</span>
-                          <button onClick={() => startEdit('ministro', selectedPlan.ministro)} title="Editar ministro" className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-indigo-50 text-indigo-500 transition-all">
-                            <Edit2 size={14} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    {/* Metadata Row: Ministro & Código de Acceso with ample space */}
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                      {/* Ministro Inline Edit */}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`font-semibold whitespace-nowrap ${isDarkMode ? 'text-white/60' : 'text-slate-500'}`}>Ministro:</span>
+                        {editingField === 'ministro' ? (
+                          <div className="flex items-center gap-1">
+                            <input 
+                              value={editValue} 
+                              onChange={e => setEditValue(e.target.value)} 
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveEdit();
+                                } else if (e.key === 'Escape') {
+                                  setEditingField(null);
+                                }
+                              }}
+                              className={`px-2.5 py-1 text-sm rounded-lg border ${isDarkMode ? 'bg-black/30 border-white/20 text-white' : 'bg-white border-slate-300 text-slate-800'}`}
+                              autoFocus
+                            />
+                            <button onClick={handleSaveEdit} disabled={isSavingEdit} className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors">
+                              <Check size={14} />
+                            </button>
+                            <button onClick={() => setEditingField(null)} disabled={isSavingEdit} className="p-1 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 group">
+                            <span className={`font-medium ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{selectedPlan.ministro || 'No asignado'}</span>
+                            <button onClick={() => startEdit('ministro', selectedPlan.ministro)} title="Editar ministro" className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-indigo-50 dark:hover:bg-white/10 text-indigo-500 transition-all">
+                              <Edit2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
-                    {/* Access Code Inline Edit */}
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-medium ${isDarkMode ? 'text-indigo-300/70' : 'text-indigo-600/70'}`}>Código de acceso:</span>
-                      {editingField === 'accessCode' ? (
-                        <div className="flex items-center gap-1">
-                          <input 
-                            value={editValue} 
-                            onChange={e => setEditValue(e.target.value)} 
-                            className={`px-2 py-1 text-sm font-mono rounded border w-24 ${isDarkMode ? 'bg-black/30 border-white/20 text-white' : 'bg-white border-slate-300 text-slate-800'}`}
-                            maxLength={6}
-                            autoFocus
-                          />
-                          <button onClick={handleSaveEdit} disabled={isSavingEdit} className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors">
-                            <Check size={14} />
-                          </button>
-                          <button onClick={() => setEditingField(null)} disabled={isSavingEdit} className="p-1 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 group">
-                          <span className={`text-sm font-mono font-bold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{selectedPlan.accessCode}</span>
-                          <button 
-                            onClick={() => handleCopyCode(selectedPlan.accessCode || '')} 
-                            title="Copiar código" 
-                            className={`p-1 rounded-md transition-all ${
-                              copiedCode 
-                                ? 'text-emerald-500 bg-emerald-500/10' 
-                                : 'opacity-0 group-hover:opacity-100 hover:bg-indigo-50 dark:hover:bg-white/10 text-indigo-500'
-                            }`}
-                          >
-                            {copiedCode ? <Check size={14} className="stroke-[3]" /> : <Copy size={14} />}
-                          </button>
-                          <button onClick={() => startEdit('accessCode', selectedPlan.accessCode || '')} title="Editar código PIN" className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-indigo-50 dark:hover:bg-white/10 text-indigo-500 transition-all">
-                            <Edit2 size={14} />
-                          </button>
-                        </div>
-                      )}
+                      {/* Access Code Inline Edit */}
+                      <div className="flex items-center gap-2">
+                        <span className={`font-semibold whitespace-nowrap ${isDarkMode ? 'text-indigo-300/80' : 'text-indigo-600/80'}`}>Código de acceso:</span>
+                        {editingField === 'accessCode' ? (
+                          <div className="flex items-center gap-1">
+                            <input 
+                              value={editValue} 
+                              onChange={e => setEditValue(e.target.value)} 
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveEdit();
+                                } else if (e.key === 'Escape') {
+                                  setEditingField(null);
+                                }
+                              }}
+                              className={`px-2.5 py-1 text-sm font-mono rounded-lg border w-24 ${isDarkMode ? 'bg-black/30 border-white/20 text-white' : 'bg-white border-slate-300 text-slate-800'}`}
+                              maxLength={6}
+                              autoFocus
+                            />
+                            <button onClick={handleSaveEdit} disabled={isSavingEdit} className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200 transition-colors">
+                              <Check size={14} />
+                            </button>
+                            <button onClick={() => setEditingField(null)} disabled={isSavingEdit} className="p-1 rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 group">
+                            <span className={`font-mono font-bold tracking-wider ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{selectedPlan.accessCode}</span>
+                            <button 
+                              onClick={() => handleCopyCode(selectedPlan.accessCode || '')} 
+                              title="Copiar código" 
+                              className={`p-1 rounded-md transition-all ${
+                                copiedCode 
+                                  ? 'text-emerald-500 bg-emerald-500/10' 
+                                  : 'opacity-0 group-hover:opacity-100 hover:bg-indigo-50 dark:hover:bg-white/10 text-indigo-500'
+                              }`}
+                            >
+                              {copiedCode ? <Check size={13} className="stroke-[3]" /> : <Copy size={13} />}
+                            </button>
+                            <button onClick={() => startEdit('accessCode', selectedPlan.accessCode || '')} title="Editar código PIN" className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-indigo-50 dark:hover:bg-white/10 text-indigo-500 transition-all">
+                              <Edit2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   
-                  {/* Actions: Lock Toggle and Export */}
-                  <div className="flex flex-wrap items-center gap-2.5">
+                  {/* Actions Toolbar: Dedicated row below info so buttons never compress the minister name */}
+                  <div className={`pt-3.5 border-t flex flex-wrap items-center gap-2 sm:gap-2.5 ${isDarkMode ? 'border-white/10' : 'border-slate-100'}`}>
                     <button
                       onClick={handleToggleLock}
                       disabled={isTogglingLock}
@@ -479,14 +604,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
                       ) : (
                         <Unlock size={14} className="mr-1.5 text-emerald-500" />
                       )}
-                      <span>{selectedPlan.isLocked ? "Bloqueado (Clic para desbloquear)" : "Bloquear Edición"}</span>
+                      <span>{selectedPlan.isLocked ? "Desbloquear Edición" : "Bloquear Edición"}</span>
+                    </button>
+
+                    {/* Import XLSX */}
+                    <input
+                      type="file"
+                      ref={adminFileInputRef}
+                      onChange={handleAdminFileUpload}
+                      accept=".xlsx, .xls"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => adminFileInputRef.current?.click()}
+                      disabled={isImportingExcel}
+                      className={`flex items-center px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                        isDarkMode 
+                          ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30' 
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm'
+                      }`}
+                      title="Importar archivo Excel para autollenar o actualizar las actividades de esta iglesia"
+                    >
+                      {isImportingExcel ? (
+                        <Loader2 size={14} className="animate-spin mr-1.5" />
+                      ) : (
+                        <Upload size={14} className="mr-1.5 text-emerald-500" />
+                      )}
+                      <span>Importar XLSX</span>
                     </button>
 
                     <button
                       onClick={() => exportToExcel(selectedPlan)}
-                      className={`flex items-center px-3.5 py-2 rounded-xl text-xs font-medium transition-colors ${isDarkMode ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-800'}`}
+                      className={`flex items-center px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                        isDarkMode 
+                          ? 'bg-indigo-600/80 hover:bg-indigo-600 text-white border-indigo-500/30' 
+                          : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm'
+                      }`}
                     >
-                      <Download size={14} className="mr-1.5" /> Exportar XLSX
+                      <Download size={14} className="mr-1.5 text-indigo-400" />
+                      <span>Exportar XLSX</span>
+                    </button>
+
+                    {/* Delete Church button (Separated to the right on larger screens) */}
+                    <button
+                      type="button"
+                      onClick={() => setChurchToDelete(selectedPlan)}
+                      className={`sm:ml-auto flex items-center px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                        isDarkMode 
+                          ? 'bg-red-500/10 hover:bg-red-500/20 text-red-300 border-red-500/30' 
+                          : 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200 shadow-sm'
+                      }`}
+                      title={`Eliminar el registro de ${getChurchName(selectedPlan.churchId!)}`}
+                    >
+                      <Trash2 size={14} className="mr-1.5 text-red-500" />
+                      <span>Eliminar Iglesia</span>
                     </button>
                   </div>
                 </div>
@@ -500,18 +672,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
                       </h3>
                       <p className={`text-xs ${isDarkMode ? 'text-white/40' : 'text-slate-400'}`}>Haz clic en cualquier área para desplegar u ocultar su información</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-1.5">
                       <button 
+                        type="button"
                         onClick={() => setAllDetailAreas(true)} 
-                        className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${isDarkMode ? 'text-indigo-300 hover:bg-white/10' : 'text-indigo-600 hover:bg-indigo-50'}`}
+                        title="Expandir todo"
+                        aria-label="Expandir todo"
+                        className={`p-2 rounded-xl border flex items-center justify-center transition-all ${
+                          isDarkMode 
+                            ? 'bg-white/5 border-white/10 hover:bg-white/10 text-indigo-300 hover:text-white' 
+                            : 'bg-white border-slate-200 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-700 shadow-xs'
+                        }`}
                       >
-                        Expandir todo
+                        <ChevronsDown size={18} />
                       </button>
                       <button 
+                        type="button"
                         onClick={() => setAllDetailAreas(false)} 
-                        className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${isDarkMode ? 'text-white/50 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-100'}`}
+                        title="Colapsar todo"
+                        aria-label="Colapsar todo"
+                        className={`p-2 rounded-xl border flex items-center justify-center transition-all ${
+                          isDarkMode 
+                            ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white/50 hover:text-white' 
+                            : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-800 shadow-xs'
+                        }`}
                       >
-                        Colapsar todo
+                        <ChevronsUp size={18} />
                       </button>
                     </div>
                   </div>
@@ -627,18 +813,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
             <span className={`text-xs font-bold uppercase tracking-wide ${isDarkMode ? 'text-white/50' : 'text-slate-500'}`}>
               Áreas de Trabajo Nacional
             </span>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-1.5">
               <button 
+                type="button"
                 onClick={() => setAllConsolidatedAreas(true)} 
-                className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${isDarkMode ? 'text-indigo-300 hover:bg-white/10' : 'text-indigo-600 hover:bg-indigo-50'}`}
+                title="Expandir todo"
+                aria-label="Expandir todo"
+                className={`p-2 rounded-xl border flex items-center justify-center transition-all ${
+                  isDarkMode 
+                    ? 'bg-white/5 border-white/10 hover:bg-white/10 text-indigo-300 hover:text-white' 
+                    : 'bg-white border-slate-200 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-700 shadow-xs'
+                }`}
               >
-                Expandir todo
+                <ChevronsDown size={18} />
               </button>
               <button 
+                type="button"
                 onClick={() => setAllConsolidatedAreas(false)} 
-                className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${isDarkMode ? 'text-white/50 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-100'}`}
+                title="Colapsar todo"
+                aria-label="Colapsar todo"
+                className={`p-2 rounded-xl border flex items-center justify-center transition-all ${
+                  isDarkMode 
+                    ? 'bg-white/5 border-white/10 hover:bg-white/10 text-white/50 hover:text-white' 
+                    : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-500 hover:text-slate-800 shadow-xs'
+                }`}
               >
-                Colapsar todo
+                <ChevronsUp size={18} />
               </button>
             </div>
           </div>
@@ -711,6 +911,106 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isDarkMode, onLo
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {adminToast && (
+        <div className={`fixed bottom-6 right-6 z-50 max-w-sm p-4 rounded-2xl border shadow-xl flex items-start gap-3 animate-fade-in ${
+          adminToast.type === 'success'
+            ? (isDarkMode ? 'bg-slate-900 border-emerald-500/40 text-emerald-300 shadow-emerald-950/40' : 'bg-white border-emerald-300 text-emerald-800 shadow-slate-200')
+            : (isDarkMode ? 'bg-slate-900 border-red-500/40 text-red-300 shadow-red-950/40' : 'bg-white border-red-300 text-red-800 shadow-slate-200')
+        }`}>
+          <div className="mt-0.5">
+            {adminToast.type === 'success' ? (
+              <Check size={18} className="text-emerald-500" />
+            ) : (
+              <AlertTriangle size={18} className="text-red-500" />
+            )}
+          </div>
+          <div className="flex-1 text-xs leading-relaxed font-medium">
+            {adminToast.message}
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setAdminToast(null)}
+            className="opacity-60 hover:opacity-100 p-0.5"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {churchToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${isDarkMode ? 'bg-slate-900 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <div className="flex items-center gap-3 mb-4 text-red-500">
+              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold">¿Eliminar iglesia registrada?</h3>
+                <p className="text-xs opacity-70">Esta acción borrará el registro de la base de datos</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mb-5 text-sm leading-relaxed">
+              <p>
+                Estás a punto de eliminar el registro de{' '}
+                <strong className={`font-bold ${isDarkMode ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                  {getChurchName(churchToDelete.churchId!)}
+                </strong>.
+              </p>
+              
+              {(!churchToDelete.ministro || churchToDelete.ministro.trim() === '') ? (
+                <div className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${isDarkMode ? 'bg-white/5 text-white/70' : 'bg-slate-50 text-slate-600'}`}>
+                  <span className="font-semibold">Estado:</span>
+                  <span className="italic">Sin ministro registrado / Registro vacío</span>
+                </div>
+              ) : (
+                <div className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${isDarkMode ? 'bg-white/5 text-white/70' : 'bg-slate-50 text-slate-600'}`}>
+                  <span className="font-semibold">Ministro:</span>
+                  <span>{churchToDelete.ministro}</span>
+                </div>
+              )}
+
+              <p className="text-xs p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300">
+                ⚠️ Al eliminar este registro, la iglesia quedará liberada en el sistema. Si fue un ingreso por accidente, se limpiará el vacío. Si necesitan registrarse luego, podrán hacerlo desde cero con un código nuevo.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setChurchToDelete(null)}
+                disabled={isDeletingChurch}
+                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  isDarkMode ? 'bg-white/10 hover:bg-white/15 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteChurch}
+                disabled={isDeletingChurch}
+                className="flex items-center px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20 transition-all disabled:opacity-50"
+              >
+                {isDeletingChurch ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin mr-1.5" />
+                    Eliminando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} className="mr-1.5" />
+                    Sí, Eliminar Registro
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

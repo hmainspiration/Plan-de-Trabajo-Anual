@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { usePlanData, useAdminSettings } from './lib/store';
+import { usePlanData, useAdminSettings, verifyAdminPin } from './lib/store';
 import { PREDEFINED_CHURCHES, MONTHS } from './data';
 import AreaAccordion from './components/AreaAccordion';
 import { exportToExcel } from './export';
@@ -23,12 +23,38 @@ import {
   AlertCircle,
   X,
   Copy,
-  Check
+  Check,
+  Shield,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Home } from './components/Home';
 import { AdminDashboard } from './components/Admin';
 
 type ViewState = 'home' | 'admin' | 'editor';
+
+const parseUrlRoute = (): { view: ViewState; churchId: string | null } => {
+  if (typeof window === 'undefined') return { view: 'home', churchId: null };
+
+  const pathname = window.location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
+  const hash = window.location.hash.toLowerCase();
+  const searchParams = new URLSearchParams(window.location.search);
+  const idFromUrl = searchParams.get('id');
+  const storedId = localStorage.getItem('active_church_id') || sessionStorage.getItem('active_church_id');
+
+  // Check /admin or /#/admin
+  if (pathname === '/admin' || hash === '#/admin') {
+    return { view: 'admin', churchId: null };
+  }
+
+  // Check /iglesia or /#/iglesia
+  if (pathname === '/iglesia' || hash === '#/iglesia') {
+    const finalId = idFromUrl || storedId;
+    return { view: 'editor', churchId: finalId || null };
+  }
+
+  return { view: 'home', churchId: null };
+};
 
 const WhatsAppIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="currentColor">
@@ -37,9 +63,21 @@ const WhatsAppIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
 );
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<ViewState>('home');
-  const [activeChurchId, setActiveChurchId] = useState<string | null>(null);
+  const initialRoute = parseUrlRoute();
+  const [currentView, setCurrentView] = useState<ViewState>(initialRoute.view);
+  const [activeChurchId, setActiveChurchId] = useState<string | null>(initialRoute.churchId);
   
+  // Admin authentication state in sessionStorage
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem('admin_authenticated') === 'true';
+  });
+
+  const [directAdminPin, setDirectAdminPin] = useState('');
+  const [directAdminError, setDirectAdminError] = useState('');
+  const [isVerifyingDirectAdmin, setIsVerifyingDirectAdmin] = useState(false);
+  const [showDirectPin, setShowDirectPin] = useState(false);
+
   const { plan, updatePlan, loading, saving, syncError } = usePlanData(activeChurchId);
   const { config: adminConfig } = useAdminSettings();
   const isWhatsAppEnabled = Boolean(adminConfig.enableWhatsApp);
@@ -51,6 +89,88 @@ export default function App() {
   const [whatsAppSuccessModal, setWhatsAppSuccessModal] = useState(false);
   const [isProcessingSend, setIsProcessingSend] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  const navigateTo = (view: ViewState, churchId?: string | null) => {
+    let targetUrl = '/';
+    if (view === 'admin') {
+      targetUrl = '/admin';
+    } else if (view === 'editor') {
+      const cid = churchId !== undefined ? churchId : (activeChurchId || localStorage.getItem('active_church_id'));
+      targetUrl = cid ? `/iglesia?id=${encodeURIComponent(cid)}` : '/iglesia';
+    }
+
+    if (window.location.pathname + window.location.search !== targetUrl) {
+      window.history.pushState({ view, churchId }, '', targetUrl);
+    }
+
+    setCurrentView(view);
+
+    if (churchId !== undefined) {
+      setActiveChurchId(churchId);
+      if (churchId) {
+        localStorage.setItem('active_church_id', churchId);
+        sessionStorage.setItem('active_church_id', churchId);
+      } else {
+        localStorage.removeItem('active_church_id');
+        sessionStorage.removeItem('active_church_id');
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = parseUrlRoute();
+      setCurrentView(route.view);
+      setActiveChurchId(route.churchId);
+      if (route.view === 'admin') {
+        setIsAdminAuthenticated(sessionStorage.getItem('admin_authenticated') === 'true');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleAdminLoginSuccess = () => {
+    sessionStorage.setItem('admin_authenticated', 'true');
+    setIsAdminAuthenticated(true);
+    navigateTo('admin');
+  };
+
+  const handleAdminLogout = () => {
+    sessionStorage.removeItem('admin_authenticated');
+    setIsAdminAuthenticated(false);
+    navigateTo('home', null);
+  };
+
+  const handleBackToHome = () => {
+    localStorage.removeItem('active_church_id');
+    sessionStorage.removeItem('active_church_id');
+    setActiveChurchId(null);
+    navigateTo('home', null);
+  };
+
+  const handleDirectAdminSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!directAdminPin.trim()) return;
+    setIsVerifyingDirectAdmin(true);
+    setDirectAdminError('');
+    try {
+      const isValid = await verifyAdminPin(directAdminPin.trim());
+      if (isValid) {
+        sessionStorage.setItem('admin_authenticated', 'true');
+        setIsAdminAuthenticated(true);
+        setDirectAdminPin('');
+      } else {
+        setDirectAdminError('PIN de administrador incorrecto.');
+      }
+    } catch (err) {
+      console.error(err);
+      setDirectAdminError('Error al verificar el PIN.');
+    } finally {
+      setIsVerifyingDirectAdmin(false);
+    }
+  };
 
   const handleCopyCode = async () => {
     if (!plan.accessCode) return;
@@ -93,8 +213,7 @@ export default function App() {
     : { background: '#f0f2f5' };
 
   const handleSelectChurch = (churchId: string, isNew: boolean) => {
-    setActiveChurchId(churchId);
-    setCurrentView('editor');
+    navigateTo('editor', churchId);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -188,19 +307,115 @@ export default function App() {
         <Home 
           isDarkMode={isDarkMode}
           onSelectChurch={handleSelectChurch}
-          onAdminLogin={() => setCurrentView('admin')}
+          onAdminLogin={handleAdminLoginSuccess}
         />
       </div>
     );
   }
 
   if (currentView === 'admin') {
+    if (!isAdminAuthenticated) {
+      return (
+        <div className="min-h-screen flex items-center justify-center px-4" style={bgStyle}>
+          <div className={`w-full max-w-md p-6 sm:p-8 rounded-3xl border shadow-2xl transition-all ${
+            isDarkMode ? 'bg-[#151329] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200 dark:border-white/10">
+              <button
+                onClick={() => navigateTo('home')}
+                className={`flex items-center text-xs sm:text-sm font-medium transition-colors ${
+                  isDarkMode ? 'text-white/60 hover:text-white' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <ArrowLeft size={16} className="mr-1.5" /> Volver al Inicio
+              </button>
+              <button
+                onClick={toggleTheme}
+                className={`p-2 rounded-full border transition-colors flex items-center justify-center ${
+                  isDarkMode ? 'bg-white/5 border-white/10 text-indigo-300 hover:bg-white/10' : 'bg-white/50 border-slate-200 text-indigo-600 hover:bg-white'
+                }`}
+              >
+                {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+              </button>
+            </div>
+
+            <div className="text-center mb-6">
+              <div className="inline-flex p-3.5 rounded-2xl bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 mb-3 shadow-inner">
+                <Shield size={32} />
+              </div>
+              <h2 className="text-xl font-bold">Panel de Administración</h2>
+              <p className={`text-xs mt-1 ${isDarkMode ? 'text-white/60' : 'text-slate-500'}`}>
+                Acceso oficial en <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">/admin</span>
+              </p>
+              <p className={`text-xs mt-2 ${isDarkMode ? 'text-white/70' : 'text-slate-600'}`}>
+                Ingresa el PIN de Administrador para desbloquear la supervisión de iglesias y el consolidado nacional.
+              </p>
+            </div>
+
+            <form onSubmit={handleDirectAdminSubmit} className="space-y-4">
+              <div>
+                <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${
+                  isDarkMode ? 'text-white/70' : 'text-slate-600'
+                }`}>
+                  PIN de Administrador
+                </label>
+                <div className="relative">
+                  <input
+                    type={showDirectPin ? "text" : "password"}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={directAdminPin}
+                    onChange={(e) => setDirectAdminPin(e.target.value)}
+                    placeholder="Introduce el PIN"
+                    className={`w-full px-4 py-3 rounded-xl border text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${
+                      isDarkMode ? 'bg-white/5 border-white/15 text-white placeholder-white/30' : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
+                    }`}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDirectPin(!showDirectPin)}
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg opacity-70 hover:opacity-100 ${
+                      isDarkMode ? 'text-white/70 hover:text-white' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {showDirectPin ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {directAdminError && (
+                <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-medium flex items-center gap-1.5">
+                  <AlertCircle size={14} />
+                  <span>{directAdminError}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isVerifyingDirectAdmin || !directAdminPin.trim()}
+                className="w-full py-3 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-98"
+              >
+                {isVerifyingDirectAdmin ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Verificando PIN...
+                  </>
+                ) : (
+                  'Acceder al Panel'
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen pb-20 transition-all duration-500" style={bgStyle}>
         <header className={`border-b transition-colors ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'}`}>
           <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
             <button 
-              onClick={() => setCurrentView('home')}
+              onClick={handleAdminLogout}
               className={`flex items-center text-sm font-medium transition-colors ${isDarkMode ? 'text-white/60 hover:text-white' : 'text-slate-500 hover:text-slate-800'}`}
             >
               <ArrowLeft size={16} className="mr-2" /> Volver al Inicio
@@ -213,7 +428,34 @@ export default function App() {
             </button>
           </div>
         </header>
-        <AdminDashboard isDarkMode={isDarkMode} onLogout={() => setCurrentView('home')} />
+        <AdminDashboard isDarkMode={isDarkMode} onLogout={handleAdminLogout} />
+      </div>
+    );
+  }
+
+  if (currentView === 'editor' && !activeChurchId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4" style={bgStyle}>
+        <div className={`max-w-md w-full p-8 rounded-3xl border shadow-xl text-center space-y-4 ${
+          isDarkMode ? 'bg-[#151329] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800'
+        }`}>
+          <div className="inline-flex p-3.5 rounded-2xl bg-indigo-500/10 text-indigo-500 dark:text-indigo-400">
+            <Building2 size={36} />
+          </div>
+          <h2 className="text-xl font-bold">Llenado del Plan de Trabajo</h2>
+          <p className={`text-xs ${isDarkMode ? 'text-white/60' : 'text-slate-500'}`}>
+            Ruta: <span className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">/iglesia</span>
+          </p>
+          <p className={`text-sm ${isDarkMode ? 'text-white/70' : 'text-slate-600'}`}>
+            No has seleccionado ninguna iglesia todavía. Por favor selecciona tu iglesia en el inicio para acceder al plan.
+          </p>
+          <button
+            onClick={() => navigateTo('home')}
+            className="w-full py-3 px-4 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+          >
+            <ArrowLeft size={16} /> Ir a Seleccionar mi Iglesia
+          </button>
+        </div>
       </div>
     );
   }
@@ -257,11 +499,9 @@ export default function App() {
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center">
             <button 
-              onClick={() => {
-                setCurrentView('home');
-                setActiveChurchId(null);
-              }}
+              onClick={handleBackToHome}
               className={`mr-4 p-2 -ml-2 rounded-full transition-colors ${isDarkMode ? 'text-white/60 hover:bg-white/10 hover:text-white' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+              title="Volver a la selección de iglesia"
             >
               <ArrowLeft size={20} />
             </button>

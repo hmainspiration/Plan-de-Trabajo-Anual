@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { doc, onSnapshot, setDoc, getDoc, collection, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, collection, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { createInitialState, PlanState, PREDEFINED_CHURCHES, sanitizePlanState } from '../data';
 
@@ -184,4 +184,9 @@ export const getAllPlans = async (): Promise<PlanState[]> => {
 export const updatePlanAdmin = async (churchId: string, updates: Partial<PlanState>): Promise<void> => {
   const docRef = doc(db, 'plan_trabajo', churchId);
   await updateDoc(docRef, { ...updates, updatedAt: Date.now() });
+};
+
+export const deleteChurchPlan = async (churchId: string): Promise<void> => {
+  const docRef = doc(db, 'plan_trabajo', churchId);
+  await deleteDoc(docRef);
 };

@@ -44,6 +44,26 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const accessCodeInputRef = useRef<HTMLInputElement>(null);
+  const adminPinInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus access code input when it appears
+  useEffect(() => {
+    if (showCodeInput) {
+      setTimeout(() => {
+        accessCodeInputRef.current?.focus();
+      }, 60);
+    }
+  }, [showCodeInput]);
+
+  // Auto-focus admin PIN input when admin modal appears
+  useEffect(() => {
+    if (showAdminLogin) {
+      setTimeout(() => {
+        adminPinInputRef.current?.focus();
+      }, 60);
+    }
+  }, [showAdminLogin]);
 
   // Close dropdown on click outside (supporting touch devices)
   useEffect(() => {
@@ -298,19 +318,35 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
       </div>
 
       {showAdminLogin ? (
-        <div className="space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleAdminLogin();
+          }}
+          className="space-y-4"
+        >
           <div>
             <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-white/80' : 'text-slate-700'}`}>
               PIN de Administrador
             </label>
             <div className="relative">
               <input
+                ref={adminPinInputRef}
                 type={showPin ? "text" : "password"}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={adminPin}
                 onChange={(e) => setAdminPin(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAdminLogin();
+                  }
+                }}
                 className={`w-full rounded-xl px-4 py-3 pr-12 text-sm focus:outline-none transition-colors ${isDarkMode ? 'bg-black/20 border border-white/10 text-white focus:border-indigo-400' : 'bg-transparent border border-slate-200 text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'}`}
                 placeholder="Ej. 123456"
                 maxLength={6}
+                autoFocus
               />
               <button
                 type="button"
@@ -331,22 +367,29 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
 
           <div className="flex gap-3 pt-2">
             <button
+              type="button"
               onClick={() => { setShowAdminLogin(false); setError(''); }}
               className={`flex-1 py-3 rounded-xl font-medium text-sm transition-colors ${isDarkMode ? 'bg-white/5 hover:bg-white/10 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
             >
               Volver
             </button>
             <button
-              onClick={handleAdminLogin}
+              type="submit"
               disabled={loading || !adminPin}
               className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-colors flex justify-center items-center"
             >
               {loading ? <Loader2 size={18} className="animate-spin" /> : 'Ingresar'}
             </button>
           </div>
-        </div>
+        </form>
       ) : (
-        <div className="space-y-6">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleContinue();
+          }}
+          className="space-y-6"
+        >
           {/* Searchable Combobox with Autocomplete Suggestions */}
           <div ref={containerRef} className="relative">
             <div className="flex items-center justify-between mb-2">
@@ -505,11 +548,18 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
                 <div className="relative">
                   <Lock size={18} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDarkMode ? 'text-white/40' : 'text-slate-400'}`} />
                   <input
+                    ref={accessCodeInputRef}
                     type="text"
                     inputMode="numeric"
                     autoComplete="off"
                     value={accessCode}
                     onChange={(e) => setAccessCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleContinue();
+                      }
+                    }}
                     className={`w-full rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none transition-colors ${isDarkMode ? 'bg-black/20 border border-white/10 text-white focus:border-indigo-400' : 'bg-transparent border border-slate-200 text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500'}`}
                     placeholder="000000"
                     maxLength={6}
@@ -522,10 +572,9 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
           {error && <p className="text-red-400 text-xs">{error}</p>}
 
           <button
-            type="button"
-            onClick={handleContinue}
+            type="submit"
             disabled={loading || !churchInput.trim() || (showCodeInput && !accessCode.trim())}
-            className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-colors flex justify-center items-center disabled:opacity-50 shadow-md shadow-indigo-600/20 active:scale-98"
+            className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-colors flex justify-center items-center disabled:opacity-50 shadow-md shadow-indigo-600/20 active:scale-98 cursor-pointer"
           >
             {loading ? (
               <span className="flex items-center justify-center">
@@ -542,14 +591,15 @@ export const Home: React.FC<HomeProps> = ({ onSelectChurch, onAdminLogin, isDark
           
           <div className="pt-4 mt-4 border-t border-slate-200/20 text-center">
             <button
+              type="button"
               onClick={() => setShowAdminLogin(true)}
               className={`inline-flex items-center text-xs font-medium ${isDarkMode ? 'text-white/40 hover:text-white' : 'text-slate-400 hover:text-slate-700'} transition-colors`}
             >
               <Shield size={14} className="mr-1" /> Acceso Administrativo
             </button>
-            <div className={`mt-2 text-[10px] ${isDarkMode ? 'text-white/30' : 'text-slate-300'}`}>v1.1.1</div>
+            <div className={`mt-2 text-[10px] ${isDarkMode ? 'text-white/30' : 'text-slate-300'}`}>v2.0.1</div>
           </div>
-        </div>
+        </form>
       )}
     </div>
   );
